@@ -4,7 +4,28 @@ Local Home Assistant RF command manager, ESPHome CC1101 proxy and independently 
 
 ## Install
 
-Requires Home Assistant 2026.10.4+ and ESPHome 2026.10.0. Copy `custom_components/harf` into HA's `custom_components`, restart HA, and add **HARF** in Devices & Services. Its sidebar panel manages nodes, RF/MagicBand groups, learning, commands, On/Off devices and JSON backups.
+Requires Home Assistant **2026.10.4+**. The proxy firmware requires ESPHome **2026.10.0+**.
+
+### Install from GitHub using HACS
+
+1. Open **HACS** in Home Assistant.
+2. Open the **⋮** menu and select **Custom repositories**.
+3. Enter `https://github.com/stewcloud/HARF` and choose **Integration** as the category/type, then add it.
+4. Find **HARF**, open it and choose **Download**. Use the default `main` branch if a version is requested; no release ZIP is needed.
+5. Restart Home Assistant.
+6. Go to **Settings → Devices & services → Add integration**, search **HARF**, and add it.
+
+The **HARF** sidebar manages nodes, RF/MagicBand groups, learning, commands, On/Off devices and JSON backups. You can open and configure the panel before flashing your proxies.
+
+HACS installs the Home Assistant integration only. Flash the ESPHome proxy firmware separately using the instructions below. HACS also manages subsequent integration updates from this repository.
+
+**Development preview:** HACS packaging does not mean live HA setup or RF/BLE hardware operation has been validated. The project is not yet an event-ready release.
+
+### Manual installation alternative
+
+Copy only `custom_components/harf` into `/config/custom_components/harf`, restart HA, then add HARF through Devices & services.
+
+### Flash each ESPHome proxy
 
 Copy `esphome/secrets.example.yaml` to `esphome/secrets.yaml` and replace every placeholder, including a unique API key (`openssl rand -base64 32`). Keep the repository directory structure for local external components. Change node_name/friendly_name for each node. Validate and compile:
 
