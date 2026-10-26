@@ -1,0 +1,1 @@
+{"title":"HARF","config":{"step":{"user":{"title":"HARF","description":"Add the local RF command library and proxy-group manager. Configure your nodes in the HARF sidebar after setup."}},"abort":{"already_configured":"HARF is already configured."}}}
