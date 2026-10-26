@@ -103,9 +103,9 @@ async def run_action(manager, action, data):
         vol.Optional("data", default={}): dict,
     }
 )
+@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_request(hass, connection, msg):
-    connection.require_admin()
     manager = hass.data.get(DOMAIN)
     if manager is None:
         connection.send_error(msg["id"], "not_loaded", "HARF is not loaded")
