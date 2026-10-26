@@ -1,3 +1,5 @@
+<p align="center"><img src="custom_components/harf/frontend/icon.png" alt="HARF radio antenna icon" width="160"></p>
+
 # HARF — 0.1 development preview
 
 Local Home Assistant RF command manager, ESPHome CC1101 proxy and independently enabled MagicBand+ broadcaster. No MQTT required. This is an original integration inspired by the HAIR workflow, not a HAIR fork.
