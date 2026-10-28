@@ -1,11 +1,31 @@
 """Shared dynamic entities backed by the saved library."""
 
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from .const import CHANGED, DOMAIN
+
+
+@callback
+def cleanup_legacy_command_entities(hass, entry):
+    """Retire old automatic command buttons/events without deleting learned RF data."""
+    entities = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(entities, entry.entry_id):
+        if entity.platform == DOMAIN and (
+            (entity.domain == "button" and entity.unique_id.startswith("commands_"))
+            or (entity.domain == "event" and entity.unique_id.startswith("receive_"))
+        ):
+            entities.async_remove(entity.entity_id)
+    devices = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(devices, entry.entry_id):
+        if (
+            any(domain == DOMAIN and identifier.startswith("commands_") for domain, identifier in device.identifiers)
+            and not er.async_entries_for_device(entities, device.id, include_disabled_entities=True)
+        ):
+            devices.async_remove_device(device.id)
 
 
 class HARFEntity(Entity):

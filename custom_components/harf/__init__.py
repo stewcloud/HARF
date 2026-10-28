@@ -14,6 +14,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
 from .const import CAPTURE_EVENT, DOMAIN, PLATFORMS
+from .entity import cleanup_legacy_command_entities
 from .manager import Manager
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -23,6 +24,7 @@ async def async_setup_entry(hass, entry):
     manager = Manager(hass)
     await manager.load()
     hass.data[DOMAIN] = manager
+    cleanup_legacy_command_entities(hass, entry)
     if not hass.data.get(DOMAIN + "_registered"):
         await hass.http.async_register_static_paths(
             [
@@ -63,7 +65,7 @@ async def async_setup_entry(hass, entry):
         webcomponent_name="harf-panel",
         sidebar_title="HARF",
         sidebar_icon="mdi:radio-tower",
-        module_url="/harf_static/panel.js?v=0.1.6",
+        module_url="/harf_static/panel.js?v=0.1.7",
         require_admin=True,
     )
     entry.async_on_unload(hass.bus.async_listen(CAPTURE_EVENT, lambda event: manager.received(event.data)))

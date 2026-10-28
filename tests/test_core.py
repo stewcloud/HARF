@@ -227,3 +227,77 @@ def test_switch_can_have_action_buttons_but_cannot_have_light_effects():
     data['devices']['puck']['effects'] = ['smooth']
     with pytest.raises(ValueError, match='only be assigned to a light'):
         validate_library(data)
+
+
+def test_color_distance_uses_known_cielab_reference_values():
+    from rf_core import color_lab
+    assert color_lab((0, 0, 0)) == pytest.approx((0, 0, 0))
+    assert color_lab((255, 255, 255)) == pytest.approx((100, 0, 0), abs=0.001)
+    assert color_lab((255, 0, 0)) == pytest.approx((53.2408, 80.0925, 67.2032), abs=0.001)
+
+
+def test_nearest_color_sends_only_colors_in_this_lights_palette():
+    from rf_core import nearest_color
+    palette = {'red': '#ff0000', 'green': '#00ff00', 'blue': '#0000ff', 'white': '#ffffff'}
+    for key, rgb in [('red', (250, 20, 10)), ('blue', (5, 10, 240)), ('green', (20, 240, 10)),
+                     ('white', (245, 245, 250))]:
+        assert nearest_color(palette, rgb) == key
+    assert nearest_color({'only': '#ff0000'}, (0, 0, 255)) == 'only'
+
+
+@pytest.mark.parametrize('bad', [None, [], [255, 0], [256, 0, 0], [True, 0, 0], [1.2, 0, 0]])
+def test_reject_invalid_requested_colors(bad):
+    from rf_core import nearest_color
+    with pytest.raises(ValueError):
+        nearest_color({'red': '#ff0000'}, bad)
+
+
+def test_empty_palette_and_equal_distance_are_deterministic():
+    from rf_core import nearest_color
+    with pytest.raises(ValueError, match='No captured colors'):
+        nearest_color({}, (255, 0, 0))
+    assert nearest_color({'first': '#ff0000', 'second': '#ff0000'}, (255, 0, 0)) == 'first'
+
+
+@pytest.mark.parametrize('bad', ['', '#abc', 'red', '#gg0000', [255, 0, 0]])
+def test_reject_invalid_assigned_color_metadata(bad):
+    data = mapped_library()
+    data['commands']['on']['color'] = bad
+    with pytest.raises(ValueError, match='#RRGGBB'):
+        validate_library(data)
+
+
+def test_color_mapping_round_trip_normalizes_hex_and_preserves_old_commands():
+    data = mapped_library()
+    data['commands']['smooth']['color'] = '#FF001A'
+    data['devices']['puck']['colors'] = ['smooth']
+    saved = validate_library(data)
+    assert saved['commands']['smooth']['color'] == '#ff001a'
+    assert saved['commands']['on']['color'] is None
+    assert saved['devices']['puck']['colors'] == ['smooth']
+    assert validate_library(saved) == saved
+
+
+def test_color_mappings_require_saved_distinct_swatches_and_light_kind():
+    data = mapped_library()
+    data['devices']['puck']['colors'] = ['smooth']
+    with pytest.raises(ValueError, match='Assign a color'):
+        validate_library(data)
+    data['commands']['smooth']['color'] = '#ff0000'
+    data['commands']['flash']['color'] = '#ff0000'
+    data['devices']['puck']['colors'].append('flash')
+    with pytest.raises(ValueError, match='distinct colors'):
+        validate_library(data)
+    data['devices']['puck'].update(kind='switch', colors=['smooth'])
+    with pytest.raises(ValueError, match='only be assigned to a light'):
+        validate_library(data)
+
+
+def test_cannot_delete_a_color_command_until_unmapped():
+    data = mapped_library()
+    data['commands']['smooth']['color'] = '#ff0000'
+    data['devices']['puck']['colors'] = ['smooth']
+    assert validate_library(data)
+    del data['commands']['smooth']
+    with pytest.raises(ValueError, match='unknown command'):
+        validate_library(data)

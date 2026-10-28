@@ -155,3 +155,61 @@ test('switch mappings keep extra buttons and clear light-only effects',async()=>
   assert.deepEqual(Array.from(calls[0].data.record.actions),['flash']);
   dom.window.close();
 });
+
+function capturePanel(){
+  const ctx=panel();const {p}=ctx;
+  p.state.library.groups={room:{name:'Room',kind:'rf',nodes:[]}};
+  p.state.sniffer=[{id:'capture1',node:'rf-proxy-01',time:1,signal:{timings:[350,-1050,350,-350,1050,-10000],frequency:433920000,repeats:3}}];
+  p.tab='Learn';p.render();
+  p.shadowRoot.querySelector('[data-use]').click();
+  ctx.form=p.shadowRoot.querySelector('form[data-section="commands"]');
+  for(const [key,value] of Object.entries({id:'puck-red',name:'Red',group:'room'}))ctx.form.elements.namedItem(key).value=value;
+  return ctx;
+}
+test('a captured color saves its assigned swatch with the RF timings',async()=>{
+  const {p,form,calls,dom}=capturePanel();
+  assert.equal(form.elements.namedItem('color').disabled,true);
+  form.elements.namedItem('is_color').checked=true;
+  form.elements.namedItem('is_color').dispatchEvent(new dom.window.Event('change'));
+  assert.equal(form.elements.namedItem('color').disabled,false);
+  form.elements.namedItem('color').value='#12ab34';
+  await p.saveForm(form);
+  assert.equal(calls[0].data.record.color,'#12ab34');
+  assert.equal(calls[0].data.record.signal.timings,'350,-1050,350,-350,1050,-10000');
+  assert.equal('is_color' in calls[0].data.record,false);
+  dom.window.close();
+});
+test('non-color commands do not get the picker default assigned as a color',async()=>{
+  const {p,form,calls,dom}=capturePanel();
+  await p.saveForm(form);
+  assert.equal(calls[0].data.record.color,null);
+  dom.window.close();
+});
+test('editing a saved color restores its swatch and resets it for a plain command',()=>{
+  const {p,dom}=capturePanel();
+  const command={name:'Red',group:'room',signal:{timings:[350,-1050,350,-350,1050,-10000]}};
+  p.state.library.commands={red:{...command,color:'#ff0022'},on:{...command,name:'On',color:null}};
+  let form=p.shadowRoot.querySelector('form[data-section="commands"]');form.scrollIntoView=()=>{};
+  p.edit('commands','red');
+  assert.equal(form.elements.namedItem('is_color').checked,true);
+  assert.equal(form.elements.namedItem('color').value,'#ff0022');
+  assert.equal(form.elements.namedItem('color').disabled,false);
+  p.edit('commands','on');
+  assert.equal(form.elements.namedItem('is_color').checked,false);
+  assert.equal(form.elements.namedItem('color').disabled,true);
+  dom.window.close();
+});
+test('device color mappings list only assigned color commands and preserve selected colors',async()=>{
+  const {p,dom,calls}=devicePanel();
+  p.state.library.commands.red={name:'Red',color:'#ff0000'};
+  p.state.library.commands.blue={name:'Blue',color:'#0000ff'};
+  p.state.library.devices['puck-lights']={name:'Puck Lights',kind:'light',on:'on',off:'off',effects:[],actions:[],colors:['blue']};
+  p.render();const form=p.shadowRoot.querySelector('form');form.scrollIntoView=()=>{};
+  p.edit('devices','puck-lights');
+  const colors=form.elements.namedItem('colors');
+  assert.deepEqual(Array.from(colors.options,o=>o.value),['red','blue']);
+  assert.deepEqual(Array.from(colors.selectedOptions,o=>o.value),['blue']);
+  await p.saveForm(form);
+  assert.deepEqual(Array.from(calls[0].data.record.colors),['blue']);
+  dom.window.close();
+});

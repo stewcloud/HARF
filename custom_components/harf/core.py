@@ -136,6 +136,49 @@ def command_references(value):
     return list(dict.fromkeys(identifier(key) for key in value))
 
 
+def assigned_color(value):
+    """A user-assigned sRGB color for one captured RF command."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+        raise ValueError("Assign a color as #RRGGBB")
+    return value.lower()
+
+
+def color_rgb(value):
+    value = assigned_color(value)
+    if value is None:
+        raise ValueError("This command has no assigned color")
+    return tuple(int(value[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def color_lab(rgb):
+    """Convert sRGB to D65 CIELAB for perceptual nearest-color matching."""
+    if not isinstance(rgb, (list, tuple)) or len(rgb) != 3 or any(
+        type(v) is not int or not 0 <= v <= 255 for v in rgb
+    ):
+        raise ValueError("RGB color needs three integers between 0 and 255")
+    r, g, b = (v / 255 for v in rgb)
+    r, g, b = (v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in (r, g, b))
+    xyz = (
+        (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047,
+        0.2126729 * r + 0.7151522 * g + 0.0721750 * b,
+        (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883,
+    )
+    x, y, z = (v ** (1 / 3) if v > (6 / 29) ** 3 else v / (3 * (6 / 29) ** 2) + 4 / 29 for v in xyz)
+    return 116 * y - 16, 500 * (x - y), 200 * (y - z)
+
+
+def nearest_color(palette, rgb):
+    """Return the mapped command with minimum Delta E 76; ties keep mapping order."""
+    if not palette:
+        raise ValueError("No captured colors are assigned to this light")
+    requested = color_lab(rgb)
+    return min(palette, key=lambda key: sum(
+        (a - b) ** 2 for a, b in zip(requested, color_lab(color_rgb(palette[key])))
+    ))
+
+
 def validate_library(raw):
     if not isinstance(raw, dict) or raw.get("version") != VERSION:
         raise ValueError("Unsupported library version")
@@ -176,6 +219,7 @@ def validate_library(raw):
                     group=identifier(record.get("group")),
                     trigger=flag(record.get("trigger", False)),
                     repeat_sensitive=flag(record.get("repeat_sensitive", False)),
+                    color=assigned_color(record.get("color")),
                 )
             elif bucket == "devices":
                 if record.get("kind") not in ("switch", "light"):
@@ -184,9 +228,10 @@ def validate_library(raw):
                     kind=record["kind"], on=identifier(record.get("on")), off=identifier(record.get("off")),
                     effects=command_references(record.get("effects", [])),
                     actions=command_references(record.get("actions", [])),
+                    colors=command_references(record.get("colors", [])),
                 )
-                if r["effects"] and r["kind"] != "light":
-                    raise ValueError("Light effects can only be assigned to a light")
+                if (r["effects"] or r["colors"]) and r["kind"] != "light":
+                    raise ValueError("Light effects and colors can only be assigned to a light")
             elif bucket == "effects":
                 r.update(payload=payload_hex(record.get("payload")), wake=flag(record.get("wake", True)))
             result[bucket][key] = r
@@ -199,8 +244,13 @@ def validate_library(raw):
     for device in result["devices"].values():
         if device["on"] == device["off"] or any(device[a] not in result["commands"] for a in ("on", "off")):
             raise ValueError("Device needs distinct saved On and Off commands")
-        if any(key not in result["commands"] for key in device["effects"] + device["actions"]):
+        if any(key not in result["commands"] for key in device["effects"] + device["actions"] + device["colors"]):
             raise ValueError("Device mapping references an unknown command; remove its mapping first")
+        colors = [result["commands"][key]["color"] for key in device["colors"]]
+        if None in colors:
+            raise ValueError("Assign a color to each selected color command in Learn first")
+        if len(colors) != len(set(colors)):
+            raise ValueError("Assign distinct colors to the color commands on this light")
         names = [result["commands"][key]["name"] for key in device["effects"]]
         if len(names) != len(set(names)):
             raise ValueError("Give each effect command on a light a distinct name")

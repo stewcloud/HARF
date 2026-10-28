@@ -5,7 +5,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import CHANGED, DOMAIN
-from .entity import HARFEntity, setup_dynamic
+from .entity import HARFEntity
 
 
 class CommandButton(HARFEntity, ButtonEntity):
@@ -44,7 +44,6 @@ class DeviceCommandButton(CommandButton):
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    setup_dynamic(hass, entry, async_add_entities, "commands", CommandButton)
     manager = hass.data[DOMAIN]
     tracked = set()
 

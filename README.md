@@ -40,7 +40,16 @@ GPIO mapping is provisional pending received-board verification: CC1101 CS=4, SC
 
 Add the flashed node to HA through ESPHome. Enable **Allow the device to perform Home Assistant actions** in that ESPHome integration's configuration so capture events can reach HA. In HARF → Nodes select its native RF transmitter, enter the exact firmware node_name as receiver ID, and select its `esphome.<node>_magicband` action. Create separate RF and MagicBand groups. To use BLE, also turn on the physical node's **MagicBand Enabled** switch; it deliberately resets off at boot.
 
-In Learn select a receiver, start listening, press the remote, use the captured signal, choose a group and save. Each command becomes a button. Optionally map distinct On/Off commands to a switch or light. Under Devices, edit a light and select saved commands under **Light effect commands** (for example Smooth, Flash and Fade). They appear in the light entity’s effect selector and work with `light.turn_on` using `effect: Smooth`. Select any saved commands under **Additional command buttons** to create buttons grouped with that HA device. Hold Ctrl/Cmd to select multiple items. Saving an existing Stable ID updates it; unselected mappings are removed. Remove mappings before deleting a referenced command. Enable received-command events for automation triggers. Sniffer captures are bounded and temporary until saved.
+In Learn select a receiver, start listening, press the remote, use the captured signal, choose a group and save. Commands stay in HARF’s library; they do not automatically become HA entities or devices. Updating removes the old automatic command buttons, received-event entities and empty command device entries without deleting learned RF data. Only devices created under Devices appear as HARF devices in HA, with any explicitly assigned extra buttons grouped under them. Optionally map distinct On/Off commands to a switch or light. Under Devices, edit a light and select saved commands under **Light effect commands** (for example Smooth, Flash and Fade). They appear in the light entity’s effect selector and work with `light.turn_on` using `effect: Smooth`. Select any saved commands under **Additional command buttons** to create buttons grouped with that HA device. Hold Ctrl/Cmd to select multiple items. Saving an existing Stable ID updates it; unselected mappings are removed. Remove mappings before deleting a referenced command. Enable received-command events to emit `harf_received` bus events for automation triggers; no per-command event entities are created. Sniffer captures are bounded and temporary until saved.
+
+### Captured colors
+
+1. Learn a color button and use its capture, or edit a saved command in Learn.
+2. Check **Assign this captured command to a color**, choose the swatch that represents the actual light output, and save. RF pulses do not identify a color by themselves; the swatch is your assignment.
+3. In Devices, edit the light and select its commands under **Captured color commands**. Hold Ctrl/Cmd for multiple selections, then save.
+4. Use the light's normal HA color picker or `light.turn_on` with `rgb_color`. HA converts other requested color formats to the light's RGB mode. HARF uses CIELAB Delta E 76 to choose the nearest assigned swatch and sends only that RF command through its saved group. The entity reports the selected swatch, rather than claiming an unavailable exact color.
+
+Only a mapped light advertises color control. Existing On/Off lights remain On/Off. Mapping changes take effect on save. Distinct swatches are required within one light; remove a light's mapping before deleting or clearing a referenced command's color. Colors/effects are assumed, not confirmed by the fixture. Brightness has no RF mapping yet: HA's RGB color mode can show a brightness control, but requests below full brightness are rejected rather than pretending to dim the light.
 
 ## Behavior and limits
 
@@ -49,7 +58,7 @@ In Learn select a receiver, start listening, press the remote, use the captured 
 - Shared-radio requests serialize; duplicate node aliases send only once. Disabled/offline/failed nodes are reported individually. Submitted is not acknowledgement from a fixture.
 - RF learning/replay is initially fixed to 433.92 MHz OOK with bounded raw timings. Rolling-code/encrypted protocols are not generically replayable.
 - Native stable HA RF is transmit-only; capture uses the ESPHome native API event `esphome.harf_received`. Duplicate reception and own-send echoes are filtered with bounded timing tolerance, not protocol decoding.
-- Native buttons, switch/light entities and received event entities are created dynamically. Switch/light states are assumed. Lights support explicitly mapped effects; brightness/color mapping is not implemented. Effects send only their selected command and use the saved command’s RF group. Extra command buttons do not infer or update the light/switch state. Existing library backups remain compatible; exports include the new mappings.
+- Created switch/light entities and their explicitly mapped action buttons are added dynamically. Switch/light states are assumed. Lights support explicitly mapped effects and captured color swatches; brightness mapping is not implemented. Effects send only their selected command and use the saved command’s RF group. Extra command buttons do not infer or update the light/switch state. Existing library backups remain compatible; exports include the new mappings.
 - MagicBand effects broadcast for 100–60000 ms plus optional 500 ms wake. Stop cancels advertising, not necessarily a band's already-running animation. No tight synchronization or radio/venue range is guaranteed. Baseline firmware reserves BLE advertising exclusively for MagicBand; general Bluetooth proxy duties are not enabled.
 - Central versioned library, validated atomic import/replace, export, admin-only panel and WS management. Receivers must be explicitly registered; unrecognized nodes cannot populate the library. Backup files include commands and node identities; keep them private when appropriate.
 
@@ -59,7 +68,7 @@ In Learn select a receiver, start listening, press the remote, use the captured 
 `harf.magicband`: group_id, effect_id, optional duration_ms.
 `harf.stop_magicband`: group_id.
 
-Actions support optional responses with per-node submission results and can be called from HA automations or Node-RED. Received command event entities expose event type `received`; bus event `harf_received` includes command_id/name/node.
+Actions support optional responses with per-node submission results and can be called from HA automations or Node-RED. The bus event `harf_received` includes command_id/name/node and remains available for automations. Learned commands can still be sent with `harf.send` or from the HARF panel.
 
 ## Development
 
