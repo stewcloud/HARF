@@ -51,3 +51,59 @@ test('backend rejection preserves entered values and displays its message',async
   assert.equal(p.busy,false);
   dom.window.close();
 });
+
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+test('Save click persists and displays the returned record even if submit is intercepted',async()=>{
+  const {p,form,calls,dom}=panel();
+  // A host page or browser extension can intercept native form submission.
+  form.addEventListener('submit',event=>{event.preventDefault();event.stopImmediatePropagation();},true);
+  p._hass={callWS:async msg=>{
+    calls.push(msg);
+    assert.equal(msg.op,'save');
+    const saved=structuredClone(p.state);
+    saved.library.nodes[msg.data.id]=msg.data.record;
+    return saved;
+  }};
+  form.querySelector('button').click();
+  assert.match(p.shadowRoot.querySelector('[role=status]').textContent,/Saving/);
+  await settle();
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].data.id,'rf-proxy-01');
+  assert.match(p.shadowRoot.querySelector('article').textContent,/RF Proxy 01/);
+  assert.match(p.shadowRoot.querySelector('[role=status]').textContent,/Saved RF Proxy 01/);
+  assert.equal(p.busy,false);
+  dom.window.close();
+});
+test('Enter saves a node without relying on native submit',async()=>{
+  const {p,form,calls,dom}=panel();
+  form.elements.namedItem('name').dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+  await settle();
+  assert.equal(calls.filter(c=>c.op==='save').length,1);
+  dom.window.close();
+});
+test('a stalled save times out visibly, preserves input and permits retry',async()=>{
+  const {p,form,dom}=panel();
+  p.requestTimeout=10;
+  p._hass={callWS:()=>new Promise(()=>{})};
+  form.querySelector('button').click();
+  await new Promise(resolve=>setTimeout(resolve,30));
+  assert.match(p.shadowRoot.querySelector('[role=alert]').textContent,/did not respond/);
+  assert.equal(form.elements.namedItem('name').value,'RF Proxy 01');
+  assert.equal(form.querySelector('button').disabled,false);
+  assert.equal(p.busy,false);
+  dom.window.close();
+});
+test('double-click and background polling do not duplicate or erase an in-flight save',async()=>{
+  const {p,form,calls,dom}=panel();
+  let finish;
+  p._hass={callWS:msg=>{calls.push(msg);return new Promise(resolve=>{finish=resolve;});}};
+  const button=form.querySelector('button');
+  button.click();button.click();
+  await p.refresh(false);
+  assert.equal(calls.length,1);
+  assert.equal(p.shadowRoot.querySelector('form'),form);
+  finish(p.state);
+  await settle();
+  assert.equal(p.busy,false);
+  dom.window.close();
+});

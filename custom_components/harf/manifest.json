@@ -1,7 +1,7 @@
 {
   "domain": "harf",
   "name": "HARF",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "config_flow": true,
   "documentation": "https://github.com/stewcloud/HARF",
   "issue_tracker": "https://github.com/stewcloud/HARF/issues",

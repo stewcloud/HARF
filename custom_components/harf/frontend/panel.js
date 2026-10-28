@@ -5,15 +5,20 @@ class HARFPanel extends HTMLElement {
   connectedCallback() { if(this._hass && !this.started) this.start(); }
   disconnectedCallback() { clearInterval(this.timer); this.started=false; }
   async start() { this.started=true; await this.refresh(); this.timer=setInterval(()=>this.refresh(false),3000); }
-  async request(op,data={}) { return this._hass.callWS({type:'harf/request',op,data}); }
+  async request(op,data={}) {
+    let timer;
+    try { return await Promise.race([this._hass.callWS({type:'harf/request',op,data}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Home Assistant did not respond within 15 seconds. Check the saved records before retrying.')),this.requestTimeout ?? 15000);})]); }
+    finally { clearTimeout(timer); }
+  }
   async refresh(render=true) {
+    if(this.busy)return;
     try { this.state=await this.request('snapshot'); if(render || (!this.dirty && !this.shadowRoot.activeElement)) this.render(); }
-    catch(e) { this.error=e.message || String(e); this.render(); }
+    catch(e) { if(this.state)this.showError(e.message||String(e));else{this.error=e.message||String(e);this.render();} }
   }
   opts(records,selected='',filter=()=>true) { return Object.entries(records).filter(([,r])=>filter(r)).map(([id,r])=>`<option value="${esc(id)}" ${selected===id?'selected':''}>${esc(r.name)}</option>`).join(''); }
   field(name,label,type='text',value='') { return `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${type==='checkbox' && value?'checked':''} ${type==='text'?'required':''}></label>`; }
   select(name,label,options,multiple=false,required=true) { return `<label>${label}<select name="${name}" ${multiple?'multiple size="5"':''} ${required?'required':''}>${options}</select></label>`; }
-  form(section,fields) { return `<form data-section="${section}" novalidate>${fields}<button type="submit">Save ${section.replace(/s$/,'')}</button><button type="reset">Clear</button></form>`; }
+  form(section,fields) { return `<form data-section="${section}" novalidate>${fields}<button type="button" data-save>Save ${section.replace(/s$/,'')}</button><button type="reset">Clear</button></form>`; }
   records(section) {
     const lib=this.state.library;
     return Object.entries(lib[section]).map(([id,r])=>`<article><strong>${esc(r.name)}</strong><small>${esc(id)} ${section==='nodes'?(this.state.nodes_online[id]?' · RF online':' · RF unavailable'):''}</small>
@@ -54,11 +59,16 @@ class HARFPanel extends HTMLElement {
       body='<h2>Backup and move your library</h2><p>Exports contain nodes, groups, commands, device mappings and effects. Import replaces the library atomically and does not transmit anything.</p><button id="export">Download JSON backup</button><label>Import library JSON<input type="file" id="import" accept="application/json,.json"></label>';
     }
     root.innerHTML=`<style>
-      :host{display:block;height:100%;overflow:auto;background:var(--primary-background-color,#f6f7fa);color:var(--primary-text-color,#192b3d);font:15px system-ui}main{max-width:1100px;margin:auto;padding:24px}header{display:flex;align-items:center;gap:14px}h1{font-size:28px;margin:0}.brand-icon{object-fit:contain;flex-shrink:0}header span{color:var(--secondary-text-color,#64748b)}nav{display:flex;gap:8px;flex-wrap:wrap;margin:25px 0}button{font:inherit;padding:10px 15px;border:1px solid var(--divider-color,#d3dbe4);border-radius:9px;background:var(--card-background-color,white);color:inherit;cursor:pointer}nav button.active,button[type=submit]{background:#206e76;color:white}button:hover{border-color:#288b92}.quiet{color:#b74343}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;padding:20px;background:var(--card-background-color,white);border-radius:14px;margin:15px 0 25px}label{display:flex;flex-direction:column;gap:7px;font-size:13px}input,select,textarea{box-sizing:border-box;padding:10px;border-radius:7px;border:1px solid var(--divider-color,#cad3df);font:inherit;background:var(--primary-background-color,#fff);color:inherit;max-width:100%}input[type=checkbox]{width:22px;height:22px}textarea{min-height:100px}article{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#dde3ea);border-radius:10px;padding:14px;margin:10px 0}article strong{min-width:150px}small,.muted{color:var(--secondary-text-color,#667788)}small{flex:1}pre{white-space:pre-wrap;width:100%;font-size:13px}.error{background:#fee7e7;color:#8d2222;padding:12px;border-radius:9px}.captures{max-height:280px;overflow:auto}p{line-height:1.6}h2{margin-top:30px;font-size:21px}@media(max-width:600px){main{padding:16px}form{grid-template-columns:1fr}}
-    </style><main><header><img class="brand-icon" src="/harf_static/icon.png" alt="HARF" width="48" height="48"><h1>HARF</h1><span>Local RF + MagicBand controls · v0.1.3</span></header><nav>${['Learn','Nodes','Groups','Devices','MagicBand','History','Backup'].map(t=>`<button data-tab="${t}" class="${t===this.tab?'active':''}">${t}</button>`).join('')}</nav>${this.error?`<p class="error" role="alert">${esc(this.error)}</p>`:''}${body}</main>`;
+      :host{display:block;height:100%;overflow:auto;background:var(--primary-background-color,#f6f7fa);color:var(--primary-text-color,#192b3d);font:15px system-ui}main{max-width:1100px;margin:auto;padding:24px}header{display:flex;align-items:center;gap:14px}h1{font-size:28px;margin:0}.brand-icon{object-fit:contain;flex-shrink:0}header span{color:var(--secondary-text-color,#64748b)}nav{display:flex;gap:8px;flex-wrap:wrap;margin:25px 0}button{font:inherit;padding:10px 15px;border:1px solid var(--divider-color,#d3dbe4);border-radius:9px;background:var(--card-background-color,white);color:inherit;cursor:pointer}nav button.active,button[data-save],button[type=submit]{background:#206e76;color:white}button:hover{border-color:#288b92}.quiet{color:#b74343}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;padding:20px;background:var(--card-background-color,white);border-radius:14px;margin:15px 0 25px}label{display:flex;flex-direction:column;gap:7px;font-size:13px}input,select,textarea{box-sizing:border-box;padding:10px;border-radius:7px;border:1px solid var(--divider-color,#cad3df);font:inherit;background:var(--primary-background-color,#fff);color:inherit;max-width:100%}input[type=checkbox]{width:22px;height:22px}textarea{min-height:100px}article{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#dde3ea);border-radius:10px;padding:14px;margin:10px 0}article strong{min-width:150px}small,.muted{color:var(--secondary-text-color,#667788)}small{flex:1}pre{white-space:pre-wrap;width:100%;font-size:13px}.error{background:#fee7e7;color:#8d2222;padding:12px;border-radius:9px}.captures{max-height:280px;overflow:auto}p{line-height:1.6}h2{margin-top:30px;font-size:21px}@media(max-width:600px){main{padding:16px}form{grid-template-columns:1fr}}
+    </style><main><header><img class="brand-icon" src="/harf_static/icon.png" alt="HARF" width="48" height="48"><h1>HARF</h1><span>Local RF + MagicBand controls · v0.1.4</span></header><nav>${['Learn','Nodes','Groups','Devices','MagicBand','History','Backup'].map(t=>`<button data-tab="${t}" class="${t===this.tab?'active':''}">${t}</button>`).join('')}</nav>${this.error?`<p class="error" role="alert">${esc(this.error)}</p>`:''}${body}</main>`;
     root.querySelectorAll('form').forEach(form=>form.addEventListener('input',()=>{this.dirty=true;}));
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{this.tab=b.dataset.tab;this.error='';this.render();});
-    root.querySelectorAll('form[data-section]').forEach(form=>form.onsubmit=e=>{e.preventDefault();this.saveForm(form);});
+    root.querySelectorAll('form[data-section]').forEach(form=>{
+      const save=()=>this.saveForm(form).catch(err=>this.showError(err.message||String(err)));
+      form.querySelector('[data-save]').addEventListener('click',e=>{e.preventDefault();save();});
+      form.addEventListener('submit',e=>{e.preventDefault();save();});
+      form.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){e.preventDefault();save();}});
+    });
     root.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>this.act('send',{command_id:b.dataset.send}));
     root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>this.edit(b.dataset.edit,b.dataset.id));
     root.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{if(confirm('Delete this record? Referenced records must be removed from devices/groups first.'))this.act('delete',{section:b.dataset.delete,id:b.dataset.id});});
@@ -81,12 +91,27 @@ class HARFPanel extends HTMLElement {
     form.scrollIntoView({behavior:'smooth'});
   }
   showError(message) { this.error=message; let box=this.shadowRoot.querySelector('[role=alert]');if(!box){box=document.createElement('p');box.className='error';box.setAttribute('role','alert');this.shadowRoot.querySelector('nav').after(box);}box.textContent=message; }
-  async saveForm(form) { if(!form.checkValidity()){const invalid=[...form.elements].find(input=>input.willValidate&&!input.validity.valid);this.showError((invalid?.closest('label')?.firstChild?.textContent?.trim()||'A required field')+': '+(invalid?.validationMessage||'Please check this field.'));invalid?.focus();return;} const section=form.dataset.section,values={};for(const input of form.elements){if(!input.name)continue;values[input.name]=input.type==='checkbox'?input.checked:input.multiple?[...input.selectedOptions].map(o=>o.value):input.type==='number'?Number(input.value):input.value;}
+  async saveForm(form) { if(this.busy)return; if(!form.checkValidity()){const invalid=[...form.elements].find(input=>input.willValidate&&!input.validity.valid);this.showError((invalid?.closest('label')?.firstChild?.textContent?.trim()||'A required field')+': '+(invalid?.validationMessage||'Please check this field.'));invalid?.focus();return;} const section=form.dataset.section,values={};for(const input of form.elements){if(!input.name)continue;values[input.name]=input.type==='checkbox'?input.checked:input.multiple?[...input.selectedOptions].map(o=>o.value):input.type==='number'?Number(input.value):input.value;}
     const id=values.id;delete values.id;
     if(section==='commands'){values.signal={timings:values.timings,frequency:values.frequency,repeats:values.repeats,gap_ms:values.gap_ms};for(const key of ['timings','frequency','repeats','gap_ms'])delete values[key];}
     await this.act('save',{section,id,record:values});
   }
-  async act(op,data={}) { if(this.busy)return;this.busy=true;this.error='';try{await this.request(op,data);await this.refresh();}catch(e){this.showError(e.message||String(e));}finally{this.busy=false;} }
+  showStatus(message) { let box=this.shadowRoot.querySelector('[role=status]');if(!box){box=document.createElement('p');box.setAttribute('role','status');this.shadowRoot.querySelector('nav').after(box);}box.textContent=message; }
+  async act(op,data={}) {
+    if(this.busy)return;
+    this.busy=true;this.error='';this.dirty=true;
+    this.shadowRoot.querySelector('[role=alert]')?.remove();
+    const buttons=[...this.shadowRoot.querySelectorAll('[data-save]')];
+    buttons.forEach(button=>{button.disabled=true;});
+    this.showStatus(op==='save'?'Saving…':'Working…');
+    try {
+      const result=await this.request(op,data);
+      if(result?.library){this.state=result;this.render();}
+      else {this.state=await this.request('snapshot');this.render();}
+      this.showStatus(op==='save'?`Saved ${data.record.name}.`:'Done.');
+    } catch(e) { this.shadowRoot.querySelector('[role=status]')?.remove();this.showError(e.message||String(e)); }
+    finally {this.busy=false;buttons.forEach(button=>{button.disabled=false;});}
+  }
 }
 if(!customElements.get('harf-panel'))customElements.define('harf-panel',HARFPanel);
 
