@@ -1,0 +1,6 @@
+{
+  "name": "harf-ui-tests",
+  "private": true,
+  "scripts": {"test:ui": "node --test tests/test_panel.cjs"},
+  "devDependencies": {"jsdom": "30.1.3"}
+}

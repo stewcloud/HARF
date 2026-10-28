@@ -12,8 +12,8 @@ class HARFPanel extends HTMLElement {
   }
   opts(records,selected='',filter=()=>true) { return Object.entries(records).filter(([,r])=>filter(r)).map(([id,r])=>`<option value="${esc(id)}" ${selected===id?'selected':''}>${esc(r.name)}</option>`).join(''); }
   field(name,label,type='text',value='') { return `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${type==='checkbox' && value?'checked':''} ${type==='text'?'required':''}></label>`; }
-  select(name,label,options,multiple=false) { return `<label>${label}<select name="${name}" ${multiple?'multiple size="5"':''} required>${options}</select></label>`; }
-  form(section,fields) { return `<form data-section="${section}">${fields}<button type="submit">Save ${section.replace(/s$/,'')}</button><button type="reset">Clear</button></form>`; }
+  select(name,label,options,multiple=false,required=true) { return `<label>${label}<select name="${name}" ${multiple?'multiple size="5"':''} ${required?'required':''}>${options}</select></label>`; }
+  form(section,fields) { return `<form data-section="${section}" novalidate>${fields}<button type="submit">Save ${section.replace(/s$/,'')}</button><button type="reset">Clear</button></form>`; }
   records(section) {
     const lib=this.state.library;
     return Object.entries(lib[section]).map(([id,r])=>`<article><strong>${esc(r.name)}</strong><small>${esc(id)} ${section==='nodes'?(this.state.nodes_online[id]?' · RF online':' · RF unavailable'):''}</small>
@@ -27,9 +27,9 @@ class HARFPanel extends HTMLElement {
     const s=this.state,l=s.library, ids=this.field('id','Stable ID (letters, numbers, - or _)'),name=this.field('name','Name');
     let body='';
     if(this.tab==='Nodes') {
-      body=`<h2>Proxy nodes</h2><p>Add each ESPHome node once. Receiver ID must match its firmware node_name. Enable MagicBand on the physical node as well.</p>`+
-        this.form('nodes',ids+name+this.select('tx','RF transmitter','<option value="">No RF transmitter</option>'+s.rf_transmitters.map(t=>`<option>${esc(t)}</option>`).join(''))+
-        this.field('rx','Receiver node ID')+this.select('magic_action','MagicBand action','<option value="">No MagicBand action</option>'+s.magic_actions.map(t=>`<option>${esc(t)}</option>`).join(''))+
+      body=`<h2>Proxy nodes</h2><p>RF transmitter and MagicBand action are optional; select the connections this node provides. Add each ESPHome node once. Receiver ID must match its firmware node_name. Enable MagicBand on the physical node as well.</p>`+
+        this.form('nodes',ids+name+this.select('tx','RF transmitter','<option value="">No RF transmitter</option>'+s.rf_transmitters.map(t=>`<option>${esc(t)}</option>`).join(''),false,false)+
+        this.field('rx','Receiver node ID')+this.select('magic_action','MagicBand action','<option value="">No MagicBand action</option>'+s.magic_actions.map(t=>`<option>${esc(t)}</option>`).join(''),false,false)+
         this.field('enabled','Node enabled','checkbox',true)+this.field('rf_enabled','RF enabled','checkbox',true)+this.field('magic_enabled','MagicBand enabled for group dispatch','checkbox',false))+this.records('nodes');
     } else if(this.tab==='Groups') {
       body='<h2>Coverage groups</h2><p>RF and MagicBand groups are independent. A command is submitted concurrently to all enabled members.</p>'+
@@ -80,11 +80,13 @@ class HARFPanel extends HTMLElement {
     this.dirty=true;
     form.scrollIntoView({behavior:'smooth'});
   }
-  async saveForm(form) { const section=form.dataset.section,values={};for(const input of form.elements){if(!input.name)continue;values[input.name]=input.type==='checkbox'?input.checked:input.multiple?[...input.selectedOptions].map(o=>o.value):input.type==='number'?Number(input.value):input.value;}
+  showError(message) { this.error=message; let box=this.shadowRoot.querySelector('[role=alert]');if(!box){box=document.createElement('p');box.className='error';box.setAttribute('role','alert');this.shadowRoot.querySelector('nav').after(box);}box.textContent=message; }
+  async saveForm(form) { if(!form.checkValidity()){const invalid=[...form.elements].find(input=>input.willValidate&&!input.validity.valid);this.showError((invalid?.closest('label')?.firstChild?.textContent?.trim()||'A required field')+': '+(invalid?.validationMessage||'Please check this field.'));invalid?.focus();return;} const section=form.dataset.section,values={};for(const input of form.elements){if(!input.name)continue;values[input.name]=input.type==='checkbox'?input.checked:input.multiple?[...input.selectedOptions].map(o=>o.value):input.type==='number'?Number(input.value):input.value;}
     const id=values.id;delete values.id;
     if(section==='commands'){values.signal={timings:values.timings,frequency:values.frequency,repeats:values.repeats,gap_ms:values.gap_ms};for(const key of ['timings','frequency','repeats','gap_ms'])delete values[key];}
     await this.act('save',{section,id,record:values});
   }
-  async act(op,data={}) { if(this.busy)return;this.busy=true;this.error='';try{await this.request(op,data);await this.refresh();}catch(e){this.error=e.message||String(e);this.render();}finally{this.busy=false;} }
+  async act(op,data={}) { if(this.busy)return;this.busy=true;this.error='';try{await this.request(op,data);await this.refresh();}catch(e){this.showError(e.message||String(e));}finally{this.busy=false;} }
 }
 if(!customElements.get('harf-panel'))customElements.define('harf-panel',HARFPanel);
+
