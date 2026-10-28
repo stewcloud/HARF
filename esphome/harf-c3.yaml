@@ -1,5 +1,5 @@
-# Copy the whole repository when using this local external-component path.
-# GPIOs are the carrier v0.1 assignment; verify your actual boards before wiring.
+# ESP32-C3 Mini V1 + CC1101. Paste into ESPHome Device Builder.
+# GPIO assignments match the confirmed HARF wiring table.
 substitutions:
   node_name: harf-01
   friendly_name: HARF 01
@@ -22,10 +22,9 @@ esp32:
     type: esp-idf
 
 external_components:
-  - source:
-      type: local
-      path: ../components
+  - source: github://stewcloud/HARF@main
     components: [magicband]
+    refresh: 1d
 
 wifi:
   ssid: !secret wifi_ssid

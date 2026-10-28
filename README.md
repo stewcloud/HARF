@@ -29,7 +29,7 @@ Copy only `custom_components/harf` into `/config/custom_components/harf`, restar
 
 ### Flash each ESPHome proxy
 
-Copy `esphome/secrets.example.yaml` to `esphome/secrets.yaml` and replace every placeholder, including a unique API key (`openssl rand -base64 32`). Keep the repository directory structure for local external components. Change node_name/friendly_name for each node. Validate and compile:
+Copy `esphome/secrets.example.yaml` to `esphome/secrets.yaml` and replace every placeholder, including a unique API key (`openssl rand -base64 32`). The YAML fetches the MagicBand component directly from GitHub; no local components folder is needed. Change node_name/friendly_name for each node. Validate and compile:
 
 ```
 esphome config esphome/harf-c3.yaml
@@ -70,3 +70,4 @@ Pure engine tests: `pytest -q`. Lint: `ruff check custom_components components t
 - ESPHome: https://esphome.io/components/cc1101/ and https://esphome.io/components/ir_rf_proxy/
 - Native HA RF: https://www.home-assistant.io/integrations/radio_frequency/
 - MagicBand protocol/payload reference: https://github.com/haw8411/magic-band-plus-lights/blob/main/protocols/magicband.c . Included example effect bytes are protocol data, independently implemented broadcaster code.
+
