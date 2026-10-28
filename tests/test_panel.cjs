@@ -5,6 +5,8 @@ const {join}=require('node:path');
 const {JSDOM}=require(process.env.HARF_JSDOM || 'jsdom');
 function panel(){
   const dom=new JSDOM('',{runScripts:'outside-only',url:'http://localhost'});
+  // Match the scoped custom-element registry polyfill used by HA.
+  Object.defineProperty(dom.window.HTMLFormControlsCollection.prototype,Symbol.iterator,{configurable:true,value(){throw new Error('Method not implemented.');}});
   dom.window.eval(readFileSync(join(__dirname,'../custom_components/harf/frontend/panel.js'),'utf8'));
   const p=dom.window.document.createElement('harf-panel');
   p.state={library:{nodes:{},groups:{},commands:{},devices:{},effects:{}},rf_transmitters:['radio_frequency.rf_proxy_01_rf_transmitter'],magic_actions:[],nodes_online:{}};
