@@ -63,7 +63,7 @@ async def async_setup_entry(hass, entry):
         webcomponent_name="harf-panel",
         sidebar_title="HARF",
         sidebar_icon="mdi:radio-tower",
-        module_url="/harf_static/panel.js?v=0.1.2",
+        module_url="/harf_static/panel.js?v=0.1.3",
         require_admin=True,
     )
     entry.async_on_unload(hass.bus.async_listen(CAPTURE_EVENT, lambda event: manager.received(event.data)))
