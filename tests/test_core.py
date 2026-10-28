@@ -179,3 +179,51 @@ async def test_unload_cancels_pending_transmissions():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert not dispatcher.jobs
+
+
+def mapped_library():
+    data = library()
+    for key in ('off', 'smooth', 'flash', 'fade'):
+        data['commands'][key] = {'name': key.title(), 'group': 'room', 'signal': signal().json()}
+    data['devices']['puck'] = {'name': 'Puck Lights', 'kind': 'light', 'on': 'on', 'off': 'off'}
+    return data
+
+
+def test_old_device_records_gain_empty_optional_mappings():
+    device = validate_library(mapped_library())['devices']['puck']
+    assert device['effects'] == device['actions'] == []
+
+
+def test_device_effects_and_actions_round_trip_and_deduplicate():
+    data = mapped_library()
+    data['devices']['puck'].update(effects=['smooth', 'flash', 'fade', 'smooth'], actions=['flash'])
+    saved = validate_library(data)
+    assert saved['devices']['puck']['effects'] == ['smooth', 'flash', 'fade']
+    assert saved['devices']['puck']['actions'] == ['flash']
+    assert validate_library(saved) == saved
+
+
+@pytest.mark.parametrize('field', ['effects', 'actions'])
+@pytest.mark.parametrize('bad', ['smooth', None, ['missing'], ['smooth'] * 129])
+def test_reject_invalid_or_dangling_device_command_mappings(field, bad):
+    data = mapped_library()
+    data['devices']['puck'][field] = bad
+    with pytest.raises(ValueError):
+        validate_library(data)
+
+
+def test_effect_command_names_must_be_distinct_within_a_light():
+    data = mapped_library()
+    data['commands']['flash']['name'] = 'Smooth'
+    data['devices']['puck']['effects'] = ['smooth', 'flash']
+    with pytest.raises(ValueError, match='distinct name'):
+        validate_library(data)
+
+
+def test_switch_can_have_action_buttons_but_cannot_have_light_effects():
+    data = mapped_library()
+    data['devices']['puck'].update(kind='switch', actions=['flash'])
+    assert validate_library(data)['devices']['puck']['actions'] == ['flash']
+    data['devices']['puck']['effects'] = ['smooth']
+    with pytest.raises(ValueError, match='only be assigned to a light'):
+        validate_library(data)

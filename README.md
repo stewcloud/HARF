@@ -17,7 +17,7 @@ Requires Home Assistant **2026.10.4+**. The proxy firmware requires ESPHome **20
 5. Restart Home Assistant.
 6. Go to **Settings → Devices & services → Add integration**, search **HARF**, and add it.
 
-The **HARF** sidebar manages nodes, RF/MagicBand groups, learning, commands, On/Off devices and JSON backups. You can open and configure the panel before flashing your proxies.
+The **HARF** sidebar manages nodes, RF/MagicBand groups, learning, commands, device mappings and JSON backups. You can open and configure the panel before flashing your proxies.
 
 HACS installs the Home Assistant integration only. Flash the ESPHome proxy firmware separately using the instructions below. HACS also manages subsequent integration updates from this repository.
 
@@ -40,7 +40,7 @@ GPIO mapping is provisional pending received-board verification: CC1101 CS=4, SC
 
 Add the flashed node to HA through ESPHome. Enable **Allow the device to perform Home Assistant actions** in that ESPHome integration's configuration so capture events can reach HA. In HARF → Nodes select its native RF transmitter, enter the exact firmware node_name as receiver ID, and select its `esphome.<node>_magicband` action. Create separate RF and MagicBand groups. To use BLE, also turn on the physical node's **MagicBand Enabled** switch; it deliberately resets off at boot.
 
-In Learn select a receiver, start listening, press the remote, use the captured signal, choose a group and save. Each command becomes a button. Optionally map distinct On/Off commands to a switch or On/Off light. Enable received-command events for automation triggers. Sniffer captures are bounded and temporary until saved.
+In Learn select a receiver, start listening, press the remote, use the captured signal, choose a group and save. Each command becomes a button. Optionally map distinct On/Off commands to a switch or light. Under Devices, edit a light and select saved commands under **Light effect commands** (for example Smooth, Flash and Fade). They appear in the light entity’s effect selector and work with `light.turn_on` using `effect: Smooth`. Select any saved commands under **Additional command buttons** to create buttons grouped with that HA device. Hold Ctrl/Cmd to select multiple items. Saving an existing Stable ID updates it; unselected mappings are removed. Remove mappings before deleting a referenced command. Enable received-command events for automation triggers. Sniffer captures are bounded and temporary until saved.
 
 ## Behavior and limits
 
@@ -49,7 +49,7 @@ In Learn select a receiver, start listening, press the remote, use the captured 
 - Shared-radio requests serialize; duplicate node aliases send only once. Disabled/offline/failed nodes are reported individually. Submitted is not acknowledgement from a fixture.
 - RF learning/replay is initially fixed to 433.92 MHz OOK with bounded raw timings. Rolling-code/encrypted protocols are not generically replayable.
 - Native stable HA RF is transmit-only; capture uses the ESPHome native API event `esphome.harf_received`. Duplicate reception and own-send echoes are filtered with bounded timing tolerance, not protocol decoding.
-- Native buttons, switch/light entities and received event entities are created dynamically. Switch/light states are assumed. Light brightness/color mapping is not implemented in this first version.
+- Native buttons, switch/light entities and received event entities are created dynamically. Switch/light states are assumed. Lights support explicitly mapped effects; brightness/color mapping is not implemented. Effects send only their selected command and use the saved command’s RF group. Extra command buttons do not infer or update the light/switch state. Existing library backups remain compatible; exports include the new mappings.
 - MagicBand effects broadcast for 100–60000 ms plus optional 500 ms wake. Stop cancels advertising, not necessarily a band's already-running animation. No tight synchronization or radio/venue range is guaranteed. Baseline firmware reserves BLE advertising exclusively for MagicBand; general Bluetooth proxy duties are not enabled.
 - Central versioned library, validated atomic import/replace, export, admin-only panel and WS management. Receivers must be explicitly registered; unrecognized nodes cannot populate the library. Backup files include commands and node identities; keep them private when appropriate.
 

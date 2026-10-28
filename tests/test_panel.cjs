@@ -109,3 +109,49 @@ test('double-click and background polling do not duplicate or erase an in-flight
   assert.equal(p.busy,false);
   dom.window.close();
 });
+
+function devicePanel(){
+  const ctx=panel();
+  const {p}=ctx;
+  p.state.library.commands=Object.fromEntries(['on','off','smooth','flash','fade'].map(id=>[id,{name:id[0].toUpperCase()+id.slice(1)}]));
+  p.tab='Devices';p.render();
+  ctx.form=p.shadowRoot.querySelector('form');
+  for(const [key,value] of Object.entries({id:'puck-lights',name:'Puck Lights',kind:'light',on:'on',off:'off'}))ctx.form.elements.namedItem(key).value=value;
+  ctx.form.elements.namedItem('kind').dispatchEvent(new ctx.dom.window.Event('change'));
+  return ctx;
+}
+test('light form saves multiple effects and additional device command buttons',async()=>{
+  const {p,form,calls,dom}=devicePanel();
+  for(const option of form.elements.namedItem('effects').options)option.selected=['smooth','flash','fade'].includes(option.value);
+  for(const option of form.elements.namedItem('actions').options)option.selected=option.value==='flash';
+  form.querySelector('[data-save]').click();
+  await settle();
+  const record=calls[0].data.record;
+  assert.deepEqual(Array.from(record.effects),['smooth','flash','fade']);
+  assert.deepEqual(Array.from(record.actions),['flash']);
+  assert.equal(record.kind,'light');
+  dom.window.close();
+});
+test('editing saved mappings restores selected commands and enables the light effect list',()=>{
+  const {p,dom}=devicePanel();
+  p.state.library.devices['puck-lights']={name:'Puck Lights',kind:'light',on:'on',off:'off',effects:['smooth','fade'],actions:['flash']};
+  p.render();
+  const form=p.shadowRoot.querySelector('form');form.scrollIntoView=()=>{};
+  p.edit('devices','puck-lights');
+  assert.equal(form.elements.namedItem('effects').disabled,false);
+  assert.deepEqual(Array.from(form.elements.namedItem('effects').selectedOptions,o=>o.value),['smooth','fade']);
+  assert.deepEqual(Array.from(form.elements.namedItem('actions').selectedOptions,o=>o.value),['flash']);
+  dom.window.close();
+});
+test('switch mappings keep extra buttons and clear light-only effects',async()=>{
+  const {p,form,calls,dom}=devicePanel();
+  form.elements.namedItem('effects').options[2].selected=true;
+  form.elements.namedItem('actions').options[3].selected=true;
+  form.elements.namedItem('kind').value='switch';
+  form.elements.namedItem('kind').dispatchEvent(new dom.window.Event('change'));
+  assert.equal(form.elements.namedItem('effects').disabled,true);
+  await p.saveForm(form);
+  assert.deepEqual(Array.from(calls[0].data.record.effects),[]);
+  assert.deepEqual(Array.from(calls[0].data.record.actions),['flash']);
+  dom.window.close();
+});

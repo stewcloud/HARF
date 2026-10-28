@@ -47,8 +47,8 @@ class HARFPanel extends HTMLElement {
         <div class="captures">${s.sniffer.map(c=>`<article><strong>${new Date(c.time*1000).toLocaleTimeString()}</strong><small>${esc(c.node)} · ${c.signal.timings.length} timings</small><button data-use="${c.id}">Use capture</button></article>`).join('')||'<p class="muted">Your captures will appear here.</p>'}</div>
         <h2>Save a command</h2>`+this.commandForm(ids,name)+this.records('commands');
     } else if(this.tab==='Devices') {
-      body='<h2>Create a switch or light</h2><p>Map distinct On and Off commands. State is assumed; this does not confirm the fixture received the signal.</p>'+
-        this.form('devices',ids+name+this.select('kind','Entity type','<option value="switch">Switch</option><option value="light">Light (On/Off)</option>')+this.select('on','On command',this.opts(l.commands))+this.select('off','Off command',this.opts(l.commands)))+this.records('devices');
+      body='<h2>Map commands to a device</h2><p>Map On/Off, light effects such as Smooth, Flash and Fade, and extra command buttons. Effect names come from your saved command names. Hold Ctrl/Cmd to select multiple commands. State is assumed.</p>'+
+        this.form('devices',ids+name+this.select('kind','Entity type','<option value="switch">Switch</option><option value="light">Light</option>')+this.select('on','On command',this.opts(l.commands))+this.select('off','Off command',this.opts(l.commands))+this.select('effects','Light effect commands (optional)',this.opts(l.commands),true,false)+this.select('actions','Additional command buttons (optional)',this.opts(l.commands),true,false))+this.records('devices');
     } else if(this.tab==='MagicBand') {
       body=`<h2>MagicBand+ broadcasts</h2><p>Selected nodes broadcast concurrently. Stop ends advertising; it does not guarantee an animation already running on a band stops immediately.</p>
         <form id="magic">${this.select('group_id','MagicBand group',this.opts(l.groups,'',r=>r.kind==='magicband'))}${this.select('effect_id','Effect',this.opts(l.effects))}${this.field('duration_ms','Broadcast duration (ms, 100–60000)','number',5000)}<button>Broadcast to group</button><button type="button" id="stop-magic">Stop group broadcast</button></form>
@@ -60,7 +60,7 @@ class HARFPanel extends HTMLElement {
     }
     root.innerHTML=`<style>
       :host{display:block;height:100%;overflow:auto;background:var(--primary-background-color,#f6f7fa);color:var(--primary-text-color,#192b3d);font:15px system-ui}main{max-width:1100px;margin:auto;padding:24px}header{display:flex;align-items:center;gap:14px}h1{font-size:28px;margin:0}.brand-icon{object-fit:contain;flex-shrink:0}header span{color:var(--secondary-text-color,#64748b)}nav{display:flex;gap:8px;flex-wrap:wrap;margin:25px 0}button{font:inherit;padding:10px 15px;border:1px solid var(--divider-color,#d3dbe4);border-radius:9px;background:var(--card-background-color,white);color:inherit;cursor:pointer}nav button.active,button[data-save],button[type=submit]{background:#206e76;color:white}button:hover{border-color:#288b92}.quiet{color:#b74343}form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;padding:20px;background:var(--card-background-color,white);border-radius:14px;margin:15px 0 25px}label{display:flex;flex-direction:column;gap:7px;font-size:13px}input,select,textarea{box-sizing:border-box;padding:10px;border-radius:7px;border:1px solid var(--divider-color,#cad3df);font:inherit;background:var(--primary-background-color,#fff);color:inherit;max-width:100%}input[type=checkbox]{width:22px;height:22px}textarea{min-height:100px}article{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card-background-color,#fff);border:1px solid var(--divider-color,#dde3ea);border-radius:10px;padding:14px;margin:10px 0}article strong{min-width:150px}small,.muted{color:var(--secondary-text-color,#667788)}small{flex:1}pre{white-space:pre-wrap;width:100%;font-size:13px}.error{background:#fee7e7;color:#8d2222;padding:12px;border-radius:9px}.captures{max-height:280px;overflow:auto}p{line-height:1.6}h2{margin-top:30px;font-size:21px}@media(max-width:600px){main{padding:16px}form{grid-template-columns:1fr}}
-    </style><main><header><img class="brand-icon" src="/harf_static/icon.png" alt="HARF" width="48" height="48"><h1>HARF</h1><span>Local RF + MagicBand controls · v0.1.5</span></header><nav>${['Learn','Nodes','Groups','Devices','MagicBand','History','Backup'].map(t=>`<button data-tab="${t}" class="${t===this.tab?'active':''}">${t}</button>`).join('')}</nav>${this.error?`<p class="error" role="alert">${esc(this.error)}</p>`:''}${body}</main>`;
+    </style><main><header><img class="brand-icon" src="/harf_static/icon.png" alt="HARF" width="48" height="48"><h1>HARF</h1><span>Local RF + MagicBand controls · v0.1.6</span></header><nav>${['Learn','Nodes','Groups','Devices','MagicBand','History','Backup'].map(t=>`<button data-tab="${t}" class="${t===this.tab?'active':''}">${t}</button>`).join('')}</nav>${this.error?`<p class="error" role="alert">${esc(this.error)}</p>`:''}${body}</main>`;
     root.querySelectorAll('form').forEach(form=>form.addEventListener('input',()=>{this.dirty=true;}));
     root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{this.tab=b.dataset.tab;this.error='';this.render();});
     root.querySelectorAll('form[data-section]').forEach(form=>{
@@ -69,6 +69,8 @@ class HARFPanel extends HTMLElement {
       form.addEventListener('submit',e=>{e.preventDefault();save();});
       form.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.tagName==='INPUT'&&e.target.type!=='checkbox'){e.preventDefault();save();}});
     });
+    const deviceForm=root.querySelector('form[data-section="devices"]');
+    if(deviceForm){const updateEffects=()=>{deviceForm.elements.namedItem('effects').disabled=deviceForm.elements.namedItem('kind').value!=='light';};deviceForm.elements.namedItem('kind').addEventListener('change',updateEffects);deviceForm.addEventListener('reset',()=>setTimeout(updateEffects,0));updateEffects();}
     root.querySelectorAll('[data-send]').forEach(b=>b.onclick=()=>this.act('send',{command_id:b.dataset.send}));
     root.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>this.edit(b.dataset.edit,b.dataset.id));
     root.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>{if(confirm('Delete this record? Referenced records must be removed from devices/groups first.'))this.act('delete',{section:b.dataset.delete,id:b.dataset.id});});
@@ -87,6 +89,7 @@ class HARFPanel extends HTMLElement {
     this.field('trigger','Create received-command event','checkbox',true)+this.field('repeat_sensitive','Toggle / Next / relative command','checkbox',false)); }
   edit(section,id) { const record=this.state.library[section][id];const form=this.shadowRoot.querySelector(`form[data-section="${section}"]`);if(!form)return;
     for(const [key,value] of Object.entries({id,...record,...(record.signal||{})})){const input=form.elements.namedItem(key);if(!input)continue;if(input.type==='checkbox')input.checked=value;else if(input.multiple)for(const option of input.options)option.selected=value.includes(option.value);else input.value=Array.isArray(value)?value.join(','):value;}
+    if(section==='devices')form.elements.namedItem('kind').dispatchEvent(new Event('change'));
     this.dirty=true;
     form.scrollIntoView({behavior:'smooth'});
   }
@@ -97,6 +100,7 @@ class HARFPanel extends HTMLElement {
     const controls=Array.prototype.slice.call(form.elements);
     if(!form.checkValidity()){const invalid=controls.find(input=>input.willValidate&&!input.validity.valid);this.showError((invalid?.closest('label')?.firstChild?.textContent?.trim()||'A required field')+': '+(invalid?.validationMessage||'Please check this field.'));invalid?.focus();return;} const section=form.dataset.section,values={};for(const input of controls){if(!input.name)continue;values[input.name]=input.type==='checkbox'?input.checked:input.multiple?[...input.selectedOptions].map(o=>o.value):input.type==='number'?Number(input.value):input.value;}
     const id=values.id;delete values.id;
+    if(section==='devices'&&values.kind!=='light')values.effects=[];
     if(section==='commands'){values.signal={timings:values.timings,frequency:values.frequency,repeats:values.repeats,gap_ms:values.gap_ms};for(const key of ['timings','frequency','repeats','gap_ms'])delete values[key];}
     await this.act('save',{section,id,record:values});
   }

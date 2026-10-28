@@ -129,6 +129,13 @@ def empty_library():
     return {"version": VERSION, "nodes": {}, "groups": {}, "commands": {}, "devices": {}, "effects": {}}
 
 
+def command_references(value):
+    """Read an optional, bounded list of saved command IDs."""
+    if not isinstance(value, list) or len(value) > 128:
+        raise ValueError("Select at most 128 commands per mapping")
+    return list(dict.fromkeys(identifier(key) for key in value))
+
+
 def validate_library(raw):
     if not isinstance(raw, dict) or raw.get("version") != VERSION:
         raise ValueError("Unsupported library version")
@@ -174,8 +181,12 @@ def validate_library(raw):
                 if record.get("kind") not in ("switch", "light"):
                     raise ValueError("Device kind must be switch or light")
                 r.update(
-                    kind=record["kind"], on=identifier(record.get("on")), off=identifier(record.get("off"))
+                    kind=record["kind"], on=identifier(record.get("on")), off=identifier(record.get("off")),
+                    effects=command_references(record.get("effects", [])),
+                    actions=command_references(record.get("actions", [])),
                 )
+                if r["effects"] and r["kind"] != "light":
+                    raise ValueError("Light effects can only be assigned to a light")
             elif bucket == "effects":
                 r.update(payload=payload_hex(record.get("payload")), wake=flag(record.get("wake", True)))
             result[bucket][key] = r
@@ -188,6 +199,11 @@ def validate_library(raw):
     for device in result["devices"].values():
         if device["on"] == device["off"] or any(device[a] not in result["commands"] for a in ("on", "off")):
             raise ValueError("Device needs distinct saved On and Off commands")
+        if any(key not in result["commands"] for key in device["effects"] + device["actions"]):
+            raise ValueError("Device mapping references an unknown command; remove its mapping first")
+        names = [result["commands"][key]["name"] for key in device["effects"]]
+        if len(names) != len(set(names)):
+            raise ValueError("Give each effect command on a light a distinct name")
     return result
 
 
